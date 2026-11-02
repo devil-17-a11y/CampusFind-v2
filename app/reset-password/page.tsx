@@ -1,0 +1,13 @@
+'use client';
+import { useEffect,useState,type FormEvent } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { getSupabase } from '@/lib/supabase';
+import { AuthFrame } from '@/components/auth/AuthFrame';
+import { Alert } from '@/components/ui/Primitives';
+export default function ResetPasswordPage(){
+  const router=useRouter();const [ready,setReady]=useState(false);const [checking,setChecking]=useState(true);const [password,setPassword]=useState('');const [confirm,setConfirm]=useState('');const [error,setError]=useState('');const [busy,setBusy]=useState(false);
+  useEffect(()=>{const db=getSupabase();if(!db){setChecking(false);return;}let active=true;const {data:{subscription}}=db.auth.onAuthStateChange((event,session)=>{if(active&&(event==='PASSWORD_RECOVERY'||event==='SIGNED_IN'||event==='INITIAL_SESSION')){setReady(!!session);setChecking(false);}});db.auth.getSession().then(({data})=>{if(active){setReady(!!data.session);setChecking(false);}}).catch(()=>{if(active)setChecking(false);});return()=>{active=false;subscription.unsubscribe()};},[]);
+  async function submit(e:FormEvent){e.preventDefault();const db=getSupabase();if(!db||!ready)return;if(password.length<8){setError('Use at least 8 characters.');return;}if(password!==confirm){setError('Passwords do not match.');return;}setBusy(true);setError('');const {error}=await db.auth.updateUser({password});if(error){setError(error.message);setBusy(false);return;}await db.auth.signOut();setBusy(false);router.replace('/login');}
+  return <AuthFrame title="Choose a new password" subtitle="Use the recovery link from your email to update your account password.">{checking?<p className="text-slate-500 text-center">Checking recovery link…</p>:!ready?<><Alert message="No valid recovery session was found. Request a new reset email and open the latest link."/><Link href="/forgot-password" className="btn btn-primary w-full">Request a new link</Link></>:<form className="space-y-5" onSubmit={submit}><div><label className="label" htmlFor="new-password">New password</label><input id="new-password" type="password" autoComplete="new-password" className="input" value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required/></div><div><label className="label" htmlFor="new-confirm">Confirm password</label><input id="new-confirm" type="password" autoComplete="new-password" className="input" value={confirm} onChange={e=>setConfirm(e.target.value)} minLength={8} required/></div><Alert message={error}/><button className="btn btn-primary w-full" disabled={busy}>{busy?'Saving…':'Update password'}</button></form>}</AuthFrame>;
+}

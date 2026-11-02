@@ -1,0 +1,9 @@
+'use client';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { getSupabase, formatDate } from '@/lib/supabase';
+type Audit={id:string;admin_id:string;action:string;created_at:string};
+export default function AdminSecurityPage(){const [logs,setLogs]=useState<Audit[]>([]);const [error,setError]=useState('');
+ useEffect(()=>{getSupabase()?.from('admin_logs').select('id,admin_id,action,created_at').order('created_at',{ascending:false}).limit(50).then(({data,error})=>{if(error)setError(error.message);else setLogs((data||[]) as Audit[])})},[]);
+ return <div><h1 className="text-3xl font-extrabold">Security & audit</h1><p className="text-slate-500 mt-2 mb-6">Review sensitive administrative actions and maintain verified staff access.</p><div className="card p-6 mb-5"><h2 className="font-bold text-lg">Account protection</h2><p className="text-sm text-slate-600 my-3">Staff tools and approvals require a verified authenticator. Manage factors, passwords and sessions in your account security center.</p><Link className="btn btn-primary" href="/account/security">Open Security Center</Link></div><div className="card p-6"><h2 className="font-bold text-lg mb-4">Recent audit activity</h2>{error&&<p role="alert" className="text-rose-700">{error}</p>}{logs.length===0?<p className="text-slate-500 text-sm">No audit events recorded yet.</p>:<div className="grid gap-3">{logs.map(l=><div key={l.id} className="border-b border-slate-100 pb-3 flex flex-wrap gap-2 justify-between"><span className="text-sm font-medium break-words">{l.action}</span><span className="text-xs text-slate-500">{formatDate(l.created_at)}</span></div>)}</div>}</div><p className="text-xs text-slate-500 mt-4">Existing database audit logging covers claim approvals/rejections. This is not a comprehensive audit of all user activity.</p></div>;
+}
