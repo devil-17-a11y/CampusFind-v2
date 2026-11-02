@@ -15,7 +15,7 @@ export default function AccountSecurityPage(){
  async function load(){const db=getSupabase();if(!db||!user)return;
   const [list,level]=await Promise.all([db.auth.mfa.listFactors(),db.auth.mfa.getAuthenticatorAssuranceLevel()]);
   if(list.error)setError(list.error.message);else setFactors((list.data?.totp||[]) as Factor[]);
-  if(level.data)setAal(level.data.currentLevel);
+  if(level.data)setAal(level.data.currentLevel ?? 'unknown');
  }
  useEffect(()=>{void load()},[user]);
  async function enroll(){const db=getSupabase();if(!db)return;setBusy(true);setError('');setNotice('');const {data,error}=await db.auth.mfa.enroll({factorType:'totp',friendlyName:'CampusFind authenticator'});setBusy(false);if(error)setError(error.message);else if(data?.totp)setEnrollment({id:data.id,qr:data.totp.qr_code,secret:data.totp.secret})}
