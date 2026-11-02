@@ -50,3 +50,7 @@ Next.js 15, React 19, TypeScript, Tailwind CSS, Supabase Auth, PostgreSQL, Supab
 A browser-local saved list does not sync between devices. Related reports are heuristic suggestions, not proof of ownership. Optional analytics are not audited traffic data. Administrative JSON export does not back up Supabase Auth users, Storage files or the whole database. Treat claim evidence and exports as sensitive.
 
 **Verification status:** The source has not been independently built or end-to-end tested against the user's live Supabase and Vercel environment. Complete the deployment and test matrix before claiming finished or approved functionality.
+
+
+## Separate Super Admin role
+For existing projects, see [SUPER_ADMIN_SETUP.md](SUPER_ADMIN_SETUP.md) and run `supabase/super_admin_upgrade.sql` followed by `supabase/super_admin_assign.sql`. The updated UI recognizes `super_admin` and adds a protected `/admin/users` screen for managing ordinary admin/student roles.

@@ -9,7 +9,7 @@ import { ItemCard } from '@/components/items/ItemCard';
 export default function AdminPage(){
   const {user,role,loading:authLoading}=useAuth();const {items,refresh}=useItems();
   const [claims,setClaims]=useState<Claim[]>([]);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [busy,setBusy]=useState(false);
-  const canAccess=!!user&&role==='admin';
+  const canAccess=!!user&&(role==='admin'||role==='super_admin');
   const load=useCallback(async()=>{const db=getSupabase();if(!db||!canAccess)return;const {data,error}=await db.from('claims').select('id,item_id,claimant_id,proof_description,status,created_at,items(title,location)').order('created_at',{ascending:false});if(error)setError(error.message);else{setClaims((data??[]) as unknown as Claim[]);setError('');}},[canAccess]);
   useEffect(()=>{void load();},[load]);
   async function review(id:string,decision:'approved'|'rejected'){

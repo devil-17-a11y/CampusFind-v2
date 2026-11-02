@@ -5,7 +5,7 @@ create extension if not exists pgcrypto;
 create table if not exists public.profiles (
  id uuid primary key references auth.users(id) on delete cascade,
  full_name text not null default '',
- role text not null default 'student' check(role in ('student','admin')),
+ role text not null default 'student' check(role in ('student','admin','super_admin')),
  created_at timestamptz not null default now()
 );
 create table if not exists public.items (
@@ -70,10 +70,17 @@ on conflict(id) do nothing;
 
 create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = '' as $$
- select exists(select 1 from public.profiles where id=(select auth.uid()) and role='admin');
+ select exists(select 1 from public.profiles where id=(select auth.uid()) and role in ('admin','super_admin'));
 $$;
 revoke all on function public.is_admin() from public;
 grant execute on function public.is_admin() to authenticated;
+
+create or replace function public.is_super_admin()
+returns boolean language sql stable security definer set search_path = '' as $$
+ select exists(select 1 from public.profiles where id=(select auth.uid()) and role='super_admin');
+$$;
+revoke all on function public.is_super_admin() from public;
+grant execute on function public.is_super_admin() to authenticated;
 
 alter table public.profiles enable row level security;
 alter table public.items enable row level security;
@@ -146,3 +153,78 @@ with check(bucket_id='item-images' and (storage.foldername(name))[1]=(select aut
 create policy "own photo cleanup" on storage.objects for delete to authenticated
 using(bucket_id='item-images' and (storage.foldername(name))[1]=(select auth.uid())::text
 and not exists(select 1 from public.items where image_path=storage.objects.name));
+
+-- Super Admin user-role management functions (AAL2 required).
+
+-- Does not return password hashes, recovery factors, or auth secrets.
+CREATE OR REPLACE FUNCTION public.list_manageable_users()
+RETURNS TABLE (id uuid, email text, full_name text, role text)
+LANGUAGE plpgsql STABLE SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF (SELECT auth.uid()) IS NULL
+     OR NOT public.is_super_admin()
+     OR COALESCE(auth.jwt()->>'aal', '') <> 'aal2'
+  THEN
+    RAISE EXCEPTION 'Verified Super Admin access required';
+  END IF;
+
+  RETURN QUERY
+    SELECT p.id, u.email::text, p.full_name, p.role
+    FROM public.profiles p
+    JOIN auth.users u ON u.id = p.id
+    WHERE p.role <> 'super_admin'
+    ORDER BY u.email;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.list_manageable_users() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.list_manageable_users() TO authenticated;
+
+-- Super Admin can promote/demote ordinary accounts between student/admin.
+-- Super Admin grants and changes remain SQL-editor-only; cannot alter self.
+CREATE OR REPLACE FUNCTION public.set_managed_user_role(
+  p_user_id uuid,
+  p_new_role text
+)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_previous text;
+BEGIN
+  IF (SELECT auth.uid()) IS NULL
+     OR NOT public.is_super_admin()
+     OR COALESCE(auth.jwt()->>'aal','') <> 'aal2'
+  THEN
+    RAISE EXCEPTION 'Verified Super Admin access required';
+  END IF;
+  IF p_new_role NOT IN ('student','admin') OR p_new_role IS NULL THEN
+    RAISE EXCEPTION 'Only student and admin roles can be assigned here';
+  END IF;
+  IF p_user_id = (SELECT auth.uid()) THEN
+    RAISE EXCEPTION 'Cannot modify your own role';
+  END IF;
+
+  SELECT role INTO v_previous
+  FROM public.profiles
+  WHERE id = p_user_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Account not found';
+  END IF;
+  IF v_previous = 'super_admin' THEN
+    RAISE EXCEPTION 'Super Admin roles must be managed in the SQL Editor';
+  END IF;
+  IF v_previous = p_new_role THEN RETURN; END IF;
+
+  UPDATE public.profiles SET role = p_new_role WHERE id = p_user_id;
+  INSERT INTO public.admin_logs(admin_id,action)
+  VALUES ((SELECT auth.uid()),
+    'Updated account ' || p_user_id::text || ' role ' || v_previous || ' -> ' || p_new_role);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.set_managed_user_role(uuid,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.set_managed_user_role(uuid,text) TO authenticated;
+

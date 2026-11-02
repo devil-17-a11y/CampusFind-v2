@@ -3,13 +3,13 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { User } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase';
 
-type AuthContextValue = { user: User | null; role: 'student' | 'admin'; loading: boolean; configured: boolean; refreshRole: () => Promise<void>; signOut: () => Promise<void> };
+type AuthContextValue = { user: User | null; role: 'student' | 'admin' | 'super_admin'; loading: boolean; configured: boolean; refreshRole: () => Promise<void>; signOut: () => Promise<void> };
 const AuthContext = createContext<AuthContextValue | null>(null);
 const db = getSupabase();
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<'student'|'admin'>('student');
+  const [role, setRole] = useState<'student'|'admin'|'super_admin'>('student');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let live = true;
     setRole('student');
     db.from('profiles').select('role').eq('id', userId).single().then(({ data }) => {
-      if (live) setRole(data?.role === 'admin' ? 'admin' : 'student');
+      if (live) setRole(data?.role === 'super_admin' ? 'super_admin' : data?.role === 'admin' ? 'admin' : 'student');
     });
     return () => { live = false; };
   }, [userId]);
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshRole = async () => {
     if (!db || !userId) return;
     const { data } = await db.from('profiles').select('role').eq('id', userId).single();
-    setRole(data?.role === 'admin' ? 'admin' : 'student');
+    setRole(data?.role === 'super_admin' ? 'super_admin' : data?.role === 'admin' ? 'admin' : 'student');
   };
   const signOut = async () => { if (db) await db.auth.signOut(); setRole('student'); };
   const value = useMemo(() => ({ user, role, loading, configured: !!db, refreshRole, signOut }), [user, role, loading]);
